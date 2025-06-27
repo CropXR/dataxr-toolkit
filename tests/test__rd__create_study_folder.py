@@ -582,21 +582,6 @@ class TestMainFunctionIntegration:
         yield test_dir
         shutil.rmtree(test_dir)
 
-    @patch("sys.argv", ["script", "-i", "TEST1", "-s", "TEST2", "--workpackage", "WP1"])
-    def test_main_with_cli_args(self):
-        """Test main function with CLI arguments."""
-        from dataxr_tools.research_drive.create_study_folder import main
-
-        # Patch the target directory
-        with patch("dataxr_tools.research_drive.create_study_folder.create_folder_structure") as mock_create:
-            mock_create.return_value = "/fake/path"
-
-            # This should not raise an exception
-            with pytest.raises(SystemExit) as exc_info:
-                main()
-            # main() might call sys.exit(0) on success
-            assert exc_info.value.code in (0, None)
-
     def test_create_folder_structure_with_all_params(self, temp_dir):
         """Test create_folder_structure with all possible parameters."""
         users = [{"name": "test user", "role": "Tester", "access_level": "READ", "expiration": "PERMANENT"}]

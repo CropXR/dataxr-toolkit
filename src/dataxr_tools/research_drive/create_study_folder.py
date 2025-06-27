@@ -147,11 +147,12 @@ def create_folder_structure(
 
 def create_folder_policy(
     folder_path,
-    investigation_label,
-    study_label,
-    study_title,
-    sensitivity_level,
-    authorized_users,
+    project_name=None,  # noqa: ARG001
+    investigation_label=None,
+    study_label=None,
+    study_title=None,
+    sensitivity_level=None,
+    authorized_users=None,
     pi_name=None,
     pi_email=None,
     workpackage=None,
@@ -164,6 +165,7 @@ def create_folder_policy(
 
     Args:
         folder_path: Path where the policy file will be created
+        project_name: Name of the project (unused, kept for backwards compatibility)
         investigation_label: Label for the investigation
         study_label: Label for the study
         study_title: Title of the study
@@ -177,7 +179,8 @@ def create_folder_policy(
     Returns:
         Path to the created policy file
     """
-    today = datetime.now().strftime("%Y-%m-%d")
+    if authorized_users is None:
+        authorized_users = []
 
     # Prepare read and write access tables
     access_rows = []
@@ -196,6 +199,7 @@ def create_folder_policy(
 
     inv_label = investigation_label or "[LABEL1]"
     study_lab = study_label or "[LABEL2]"
+    today = datetime.now().strftime("%Y-%m-%d")
 
     policy_content = f"""# FOLDER POLICY
 
@@ -544,9 +548,8 @@ def main():
     else:
         # Use CLI arguments (original behavior)
         if not all([args.investigation, args.study, args.workpackage]):
-            parser.error(
-                "When not using --study-config, -i/--investigation, -s/--study, and --workpackage are required"
-            )
+            error_msg = "When not using --study-config, -i/--investigation, -s/--study, and --workpackage are required"
+            parser.error(error_msg)
 
         investigation_label = args.investigation
         study_label = args.study
