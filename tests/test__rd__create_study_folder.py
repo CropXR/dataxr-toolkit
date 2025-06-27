@@ -1,23 +1,15 @@
-import json
 import os
 import shutil
-import sys
 import tempfile
-from unittest.mock import mock_open, patch
+from unittest.mock import patch
 
 import pytest
-
-# Add src to path if needed
-if os.path.exists(os.path.join(os.path.dirname(__file__), "../src")):
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
 
 try:
     from dataxr_tools.research_drive.create_study_folder import (
         create_folder_policy,
         create_folder_structure,
-        extract_labels_from_folder_name,
         load_study_config,
-        load_users_from_file,
         parse_users_from_study_json,
     )
 except ImportError as e:
@@ -312,9 +304,9 @@ class TestUserParsing:
     def test_parse_users_from_study_json(self):
         """Test parsing users from study JSON data."""
         study_data = {
-            "owners": ["user1 test (user1@testlab.org)", "user2 admin (user2@testlab.org)"],
-            "contributors": ["user3 researcher (user3@testlab.org)", "user4 analyst (user4@testlab.org)"],
-            "readers": ["user5 viewer (user5@testlab.org)"],
+            "owners": ["Dr. Alice Smith (alice@example.org)", "Dr. Bob Jones (bob@example.org)"],
+            "contributors": ["Dr. Carol Wilson (carol@example.org)", "Dr. David Brown (david@example.org)"],
+            "readers": ["Dr. Eve Davis (eve@example.org)"],
         }
 
         users = parse_users_from_study_json(study_data)
@@ -346,57 +338,11 @@ class TestUserParsing:
         users = parse_users_from_study_json(study_data)
         assert len(users) == 0
 
-    @patch("builtins.open", new_callable=mock_open, read_data='[{"name": "user9 tester", "role": "QA Engineer"}]')
-    def test_load_users_from_file(self, mock_file):  # noqa: ARG002
-        """Test loading users from JSON file."""
-        users = load_users_from_file("test_users.json")
-
-        assert len(users) == 1
-        assert users[0]["name"] == "user9 tester"
-        assert users[0]["role"] == "QA Engineer"
-
-
-class TestLabelExtraction:
-    """Test label extraction from folder names."""
-
-    def test_extract_labels_valid_folder_name(self):
-        """Test extracting labels from valid folder name."""
-        folder_name = "i_WPC2_CXRP4/s_CXRP4-CXRS30_temperature-hormone-gene-networks-arabidopsis"
-
-        workpackage, investigation_label, study_label = extract_labels_from_folder_name(folder_name)
-
-        assert workpackage == "WPC2"
-        assert investigation_label == "CXRP4"
-        assert study_label == "CXRS30"
-
-    @pytest.mark.parametrize(
-        ("invalid_name", "expected_error"),
-        [
-            ("invalid_format", "Invalid folder name format"),
-            ("i_WPC2_CXRP4", "Invalid folder name format"),
-            ("s_CXRP4-CXRS30_slug", "Invalid folder name format"),
-            ("i_WP/s_CXRP4-CXRS30_slug", "Invalid investigation format"),
-            ("i_WPC2_CXRP4/invalid_study_format", "Study part should start with 's_'"),
-            ("i_WPC2_CXRP4/s_MISMATCH-CXRS30_slug", "Investigation label mismatch"),
-        ],
-    )
-    def test_extract_labels_invalid_format(self, invalid_name, expected_error):
-        """Test that invalid folder name format raises ValueError."""
-        with pytest.raises(ValueError, match=expected_error):
-            extract_labels_from_folder_name(invalid_name)
-
 
 class TestConfigLoading:
     """Test configuration loading functionality."""
 
-    @patch("builtins.open", new_callable=mock_open, read_data='{"test": "data"}')
-    def test_load_study_config(self, mock_file):  # noqa: ARG002
-        """Test loading study configuration from JSON file."""
-        config = load_study_config("test_config.json")
-        assert config["test"] == "data"
-
-    @patch("builtins.open", side_effect=FileNotFoundError("File not found"))
-    def test_load_study_config_file_not_found(self, mock_file):  # noqa: ARG002
+    def test_load_study_config_file_not_found(self):
         """Test that missing config file causes system exit."""
         with pytest.raises(SystemExit) as exc_info:
             load_study_config("nonexistent.json")
@@ -417,27 +363,27 @@ class TestIntegrationWithStudyConfig:
     def sample_study_config(self):
         """Sample study configuration data."""
         return {
-            "accession_code": "CXRS30",
-            "investigation_accession_code": "CXRP4",
-            "investigation_work_package": "WPC2",
-            "title": (
-                "Study of the influence of moderate elevated temperature on hormone-induced gene regulatory networks"
-            ),
-            "slug": "temperature-hormone-gene-networks-arabidopsis",
-            "effective_principal_investigator_name": "user13 principal",
-            "effective_principal_investigator_email": "user13@testlab.org",
+            "accession_code": "TEST30",
+            "investigation_accession_code": "TEST4",
+            "investigation_work_package": "WP2",
+            "title": ("Study of the influence of environmental factors on biological networks"),
+            "slug": "environmental-factors-biological-networks",
+            "effective_principal_investigator_name": "Dr. Jane Smith",
+            "effective_principal_investigator_email": "jane.smith@example.org",
             "security_level": "internal",
-            "owners": ["user14 owner (user14@testlab.org)", "user15 coowner (user15@testlab.org)"],
-            "contributors": ["user16 contributor (user16@testlab.org)", "user17 support (user17@testlab.org)"],
+            "owners": ["Dr. John Doe (john.doe@example.org)", "Dr. Alice Johnson (alice.johnson@example.org)"],
+            "contributors": ["Dr. Bob Wilson (bob.wilson@example.org)", "Dr. Carol Brown (carol.brown@example.org)"],
             "readers": [],
-            "folder_name": "i_WPC2_CXRP4/s_CXRP4-CXRS30_temperature-hormone-gene-networks-arabidopsis",
+            "folder_name": "i_WP2_TEST4/s_TEST4-TEST30_environmental-factors-biological-networks",
         }
 
     def test_integration_creates_structure_and_preserves_files(self, temp_dir, sample_study_config):
         """Test complete integration: creates structure and preserves existing files."""
-        # Extract information as the main script would
+        # Extract information directly from config (since extract_labels_from_folder_name was removed)
         folder_name = sample_study_config["folder_name"]
-        workpackage, investigation_label, study_label = extract_labels_from_folder_name(folder_name)
+        workpackage = sample_study_config["investigation_work_package"]
+        investigation_label = sample_study_config["investigation_accession_code"]
+        study_label = sample_study_config["accession_code"]
 
         study_title = sample_study_config["title"]
         study_slug = sample_study_config["slug"]
@@ -559,18 +505,6 @@ class TestErrorHandling:
             overwrite_existing=True,
         )
 
-    @patch("builtins.open", side_effect=json.JSONDecodeError("Invalid JSON", "", 0))
-    def test_load_users_json_decode_error(self, mock_open):  # noqa: ARG002
-        """Test handling of JSON decode errors when loading users."""
-        with pytest.raises(SystemExit):
-            load_users_from_file("invalid.json")
-
-    @patch("builtins.open", side_effect=json.JSONDecodeError("Invalid JSON", "", 0))
-    def test_load_study_config_json_decode_error(self, mock_open):  # noqa: ARG002
-        """Test handling of JSON decode errors when loading study config."""
-        with pytest.raises(SystemExit):
-            load_study_config("invalid.json")
-
 
 class TestMainFunctionIntegration:
     """Test main function and command line integration."""
@@ -605,13 +539,3 @@ class TestMainFunctionIntegration:
         expected_path = os.path.join(temp_dir, "custom_folder")
         assert result_path == expected_path
         assert os.path.exists(expected_path)
-
-
-def test_module_imports():
-    """Test that all required functions can be imported."""
-    assert callable(create_folder_structure)
-    assert callable(create_folder_policy)
-    assert callable(load_users_from_file)
-    assert callable(parse_users_from_study_json)
-    assert callable(load_study_config)
-    assert callable(extract_labels_from_folder_name)

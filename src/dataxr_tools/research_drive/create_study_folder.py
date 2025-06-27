@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 from datetime import datetime
 
@@ -76,8 +77,8 @@ def create_folder_structure(
     if structure is None:
         # Generic structure that works for multiple data types
         structure = {
-            "raw_data": None,
-            "processed_data": None,
+            "raw": None,
+            "processed": None,
             "metadata": None,
         }
 
@@ -226,8 +227,8 @@ def create_folder_policy(
 ### Access
 The following individuals or groups have read access to this folder structure:
 
-| Name | Role | Department | Access Level | Expiration Date |
-|------|------|------------|--------------|-----------------|
+| Name | Role | Access Level | Expiration Date |
+|------|------|--------------|-----------------|
 {chr(10).join(access_rows)}
 
 ## Folder Naming Convention
@@ -235,8 +236,8 @@ All folders within this project follow a strict naming convention:
 
 - All first-level folders are prefixed with: **{inv_label}-{study_lab}_**
 - Examples:
-  - Raw data folder: **{inv_label}-{study_lab}_raw_data**
-  - Processed data folder: **{inv_label}-{study_lab}_processed_data**
+  - Raw data folder: **{inv_label}-{study_lab}_raw**
+  - Processed data folder: **{inv_label}-{study_lab}_processed**
   - Metadata folder: **{inv_label}-{study_lab}_metadata**
   - Analysis folder: **{inv_label}-{study_lab}_analysis**
   - Documentation folder: **{inv_label}-{study_lab}_documentation**
@@ -245,7 +246,7 @@ All folders within this project follow a strict naming convention:
 
 ### Raw Data
 - Raw data must never be modified
-- All raw data files must be stored in the **{inv_label}-{study_lab}_raw_data** folder
+- All raw data files must be stored in the **{inv_label}-{study_lab}_raw** folder
 
 ### Other Data Folders
 - All first-level folders follow the naming convention **{inv_label}-{study_lab}_[FOLDER_TYPE]**
@@ -274,12 +275,10 @@ For questions regarding this policy or data management assistance, please contac
             backup_path = f"{policy_path}.bak.{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             try:
                 # Use copy instead of rename to preserve original during backup creation
-                import shutil
-
                 shutil.copy2(policy_path, backup_path)
                 print(f"Backed up existing policy file to: {backup_path}")
             except Exception as e:
-                print(f"Warning: Could not backup existing policy file: {e!s}")
+                print(f"Warning: Could not backup existing policy file: {e}")
 
         # Write the policy file (overwrite if overwrite_existing=True)
         if overwrite_existing or not os.path.exists(policy_path):
@@ -291,7 +290,7 @@ For questions regarding this policy or data management assistance, please contac
                 else:
                     print(f"Created policy file: {policy_path}")
             except Exception as e:
-                print(f"Error writing policy file: {e!s}")
+                print(f"Error writing policy file: {e}")
     return policy_path
 
 
@@ -308,7 +307,7 @@ def load_users_from_file(users_file):
         with open(users_file, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"Error loading users file: {e!s}")
+        print(f"Error loading users file: {e}")
         sys.exit(1)
 
 
@@ -395,74 +394,8 @@ def load_study_config(config_file):
         with open(config_file, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"Error loading study config file: {e!s}")
+        print(f"Error loading study config file: {e}")
         sys.exit(1)
-
-
-def extract_labels_from_folder_name(folder_name):
-    """Extract investigation and study labels from folder name.
-
-    Args:
-        folder_name: Folder name in format like
-            "i_WPC2_CXRP4/s_CXRP4-CXRS30_temperature-hormone-gene-networks-arabidopsis"
-
-    Returns:
-        Tuple of (workpackage, investigation_label, study_label)
-    """
-    # Split by '/' to get investigation and study parts
-    parts = folder_name.split("/")
-
-    if len(parts) != 2:
-        error_msg = f"Invalid folder name format: {folder_name}"
-        raise ValueError(error_msg)
-
-    investigation_part = parts[0]  # e.g., "i_WPC2_CXRP4"
-    study_part = parts[1]  # e.g., "s_CXRP4-CXRS30_temperature-hormone-gene-networks-arabidopsis"
-
-    # Extract from investigation part: "i_WPC2_CXRP4"
-    if not investigation_part.startswith("i_"):
-        error_msg = f"Investigation part should start with 'i_': {investigation_part}"
-        raise ValueError(error_msg)
-
-    inv_parts = investigation_part[2:].split("_", 1)  # Remove "i_" and split once
-    if len(inv_parts) != 2:
-        error_msg = f"Invalid investigation format: {investigation_part}"
-        raise ValueError(error_msg)
-
-    workpackage = inv_parts[0]  # e.g., "WPC2"
-    investigation_label = inv_parts[1]  # e.g., "CXRP4"
-
-    # Extract from study part: "s_CXRP4-CXRS30_temperature-hormone-gene-networks-arabidopsis"
-    if not study_part.startswith("s_"):
-        error_msg = f"Study part should start with 's_': {study_part}"
-        raise ValueError(error_msg)
-
-    study_content = study_part[2:]  # Remove "s_"
-
-    # Find the first underscore after the labels to separate labels from slug
-    # Format is "CXRP4-CXRS30_slug"
-    underscore_pos = study_content.find("_")
-    if underscore_pos == -1:
-        error_msg = f"Invalid study format, missing underscore: {study_part}"
-        raise ValueError(error_msg)
-
-    labels_part = study_content[:underscore_pos]  # e.g., "CXRP4-CXRS30"
-
-    # Split labels by hyphen
-    if "-" not in labels_part:
-        error_msg = f"Invalid labels format, missing hyphen: {labels_part}"
-        raise ValueError(error_msg)
-
-    label_parts = labels_part.split("-", 1)  # Split once on first hyphen
-    expected_investigation = label_parts[0]  # Should match investigation_label
-    study_label = label_parts[1]  # e.g., "CXRS30"
-
-    # Validate that investigation labels match
-    if expected_investigation != investigation_label:
-        error_msg = f"Investigation label mismatch: {expected_investigation} vs {investigation_label}"
-        raise ValueError(error_msg)
-
-    return workpackage, investigation_label, study_label
 
 
 def main():
@@ -501,18 +434,10 @@ def main():
         # Extract values from JSON, allowing CLI args to override
         folder_name = args.folder_name or study_data.get("folder_name")
 
-        if folder_name:
-            # Extract labels from folder name
-            try:
-                workpackage, investigation_label, study_label = extract_labels_from_folder_name(folder_name)
-            except ValueError as e:
-                print(f"Error parsing folder name: {e!s}")
-                sys.exit(1)
-        else:
-            # Use individual fields
-            workpackage = args.workpackage or study_data.get("investigation_work_package")
-            investigation_label = args.investigation or study_data.get("investigation_accession_code")
-            study_label = args.study or study_data.get("accession_code")
+        # Use individual fields directly from study data
+        workpackage = args.workpackage or study_data.get("investigation_work_package")
+        investigation_label = args.investigation or study_data.get("investigation_accession_code")
+        study_label = args.study or study_data.get("accession_code")
 
         study_title = args.study_title or study_data.get("title")
         study_slug = study_data.get("slug")
@@ -527,17 +452,9 @@ def main():
         }
         sensitivity_level = args.sensitivity or sensitivity_map.get(security_level)
 
-        # Get PI information - prefer effective over regular
-        pi_name = (
-            args.pi_name
-            or study_data.get("effective_principal_investigator_name")
-            or study_data.get("principal_investigator_name")
-        )
-        pi_email = (
-            args.pi_email
-            or study_data.get("effective_principal_investigator_email")
-            or study_data.get("principal_investigator_email")
-        )
+        # Get PI information - always prefer effective fields
+        pi_name = args.pi_name or study_data.get("effective_principal_investigator_name")
+        pi_email = args.pi_email or study_data.get("effective_principal_investigator_email")
 
         # Parse users from study data unless users-file is specified
         if args.users_file:
@@ -579,7 +496,7 @@ def main():
             with open(args.structure_file, encoding="utf-8") as f:
                 structure = json.load(f)
         except Exception as e:
-            print(f"Error loading structure file: {e!s}")
+            print(f"Error loading structure file: {e}")
             sys.exit(1)
 
     try:
@@ -601,7 +518,7 @@ def main():
 
         print(f"Successfully created folder structure in: {created_folder}")
     except Exception as e:
-        print(f"Error: {e!s}")
+        print(f"Error: {e}")
         sys.exit(1)
 
 
