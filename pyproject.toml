@@ -34,7 +34,7 @@ version-file = "_version.py"
 Homepage = "git@github.com:CropXR/DataXR-Tools.git"
 
 [project.scripts]
-main_script = "dataxr_tools.main:main"
+dataxr-create-study-folder = "dataxr_tools.research_drive.create_study_folder:main"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
