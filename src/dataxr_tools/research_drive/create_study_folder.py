@@ -21,6 +21,7 @@ def create_folder_structure(
     workpackage=None,
     structure=None,
     overwrite_existing=False,
+    create_investigation_folder=False,
 ):
     """Create a folder structure with focus on data organization by type.
 
@@ -41,27 +42,95 @@ def create_folder_structure(
         workpackage: Workpackage identifier
         structure: A nested dictionary defining the folder structure
         overwrite_existing: Whether to overwrite existing FOLDER_POLICY.md file (folders are never deleted)
+        create_investigation_folder: Whether to create the investigation folder level (default: False)
 
     Returns:
         Path to the created main folder
     """
+    print(f"DEBUG: create_folder_structure called with create_investigation_folder={create_investigation_folder}")
+
     # Verify target path exists
     if not os.path.exists(target_path):
         error_msg = f"Target directory does not exist: {target_path}"
         raise FileNotFoundError(error_msg)
 
-    # Generate folder name using default pattern if not provided
+    # Generate folder name using default pattern if not provided or handle custom folder name
     if folder_name is None:
-        if not all([workpackage, investigation_label, study_label, study_slug]):
-            error_msg = (
-                "Either folder_name must be provided, or all of workpackage, "
-                "investigation_label, study_label, and study_slug must be provided"
-            )
+        if not all([investigation_label, study_label, study_slug]):
+            error_msg = "Either folder_name must be provided, or all of investigation_label, study_label, and study_slug must be provided"
             raise ValueError(error_msg)
-        folder_name = f"i_{workpackage}_{investigation_label}/s_{investigation_label}-{study_label}_{study_slug}"
 
-    # Create the main folder
-    main_folder_path = os.path.join(target_path, folder_name)
+        if not workpackage:
+            error_msg = "workpackage must be provided for folder name generation"
+            raise ValueError(error_msg)
+
+        if create_investigation_folder:
+            # Create investigation folder and study folder within it
+            investigation_folder = f"i_{workpackage}_{investigation_label}"
+            study_folder = f"s_{workpackage}-{investigation_label}-{study_label}_{study_slug}"
+
+            # Create investigation folder first
+            investigation_path = os.path.join(target_path, investigation_folder)
+            if not os.path.exists(investigation_path):
+                os.makedirs(investigation_path, exist_ok=True)
+                print(f"Created investigation folder: {investigation_path}")
+            else:
+                print(f"Note: Investigation folder already exists: {investigation_path}")
+
+            # Set the main folder path to be inside the investigation folder
+            main_folder_path = os.path.join(investigation_path, study_folder)
+            print(f"DEBUG: Generated folder path with investigation: {main_folder_path}")
+        else:
+            # Create study folder directly in target path
+            study_folder = f"s_{workpackage}-{investigation_label}-{study_label}_{study_slug}"
+            main_folder_path = os.path.join(target_path, study_folder)
+            print(f"DEBUG: Generated folder path without investigation: {main_folder_path}")
+    else:
+        # Handle custom folder name - respect create_investigation_folder flag
+        if create_investigation_folder:
+            # If folder_name contains investigation folder path, use it as-is
+            # Otherwise, treat it as the study folder name and create investigation folder
+            if folder_name.startswith("i_") and "/" in folder_name:
+                # Custom folder name already includes investigation path
+                main_folder_path = os.path.join(target_path, folder_name)
+                print(f"DEBUG: Using custom folder path with investigation: {main_folder_path}")
+            else:
+                # Create investigation folder and put custom folder inside it
+                if not all([workpackage, investigation_label]):
+                    error_msg = "workpackage and investigation_label required when create_investigation_folder=True"
+                    raise ValueError(error_msg)
+
+                investigation_folder = f"i_{workpackage}_{investigation_label}"
+                investigation_path = os.path.join(target_path, investigation_folder)
+                if not os.path.exists(investigation_path):
+                    os.makedirs(investigation_path, exist_ok=True)
+                    print(f"Created investigation folder: {investigation_path}")
+                else:
+                    print(f"Note: Investigation folder already exists: {investigation_path}")
+
+                main_folder_path = os.path.join(investigation_path, folder_name)
+                print(f"DEBUG: Using custom folder inside investigation: {main_folder_path}")
+        else:
+            # Extract study folder name from custom folder_name if it contains investigation path
+            if "/" in folder_name and folder_name.startswith("i_"):
+                # Extract just the study folder part (after the last /)
+                # But ensure it follows proper naming convention
+                study_folder_name = folder_name.split("/")[-1]
+
+                # If the extracted study folder doesn't start with s_{workpackage}, rebuild it properly
+                if not study_folder_name.startswith(f"s_{workpackage}-"):
+                    if not all([workpackage, investigation_label, study_label, study_slug]):
+                        error_msg = "workpackage, investigation_label, study_label, and study_slug required to rebuild study folder name"
+                        raise ValueError(error_msg)
+                    study_folder_name = f"s_{workpackage}-{investigation_label}-{study_label}_{study_slug}"
+                    print(f"DEBUG: Rebuilt study folder name: {study_folder_name}")
+
+                main_folder_path = os.path.join(target_path, study_folder_name)
+                print(f"DEBUG: Extracted study folder from custom path: {main_folder_path}")
+            else:
+                # Use custom folder name directly in target path
+                main_folder_path = os.path.join(target_path, folder_name)
+                print(f"DEBUG: Using custom folder directly: {main_folder_path}")
 
     # Check if main folder already exists
     if os.path.exists(main_folder_path):
@@ -183,10 +252,13 @@ def create_folder_policy(
     if authorized_users is None:
         authorized_users = []
 
+    # Filter to show only owners and PIs with READ-WRITE-SHARE access
+    filtered_users = filter_owners_and_pis_with_write_share_access(authorized_users)
+
     # Prepare read and write access tables
     access_rows = []
 
-    for user in authorized_users:
+    for user in filtered_users:
         name = user.get("name", "[Name]")
         role = user.get("role", "[Role]")
         access_level = user.get("access_level", "READ")
@@ -225,7 +297,7 @@ def create_folder_policy(
 ## Access Control
 
 ### Access
-The following individuals or groups have read access to this folder structure:
+The following individuals or groups have READ-WRITE-SHARE access to this folder structure:
 
 | Name | Role | Access Level | Expiration Date |
 |------|------|--------------|-----------------|
@@ -311,6 +383,35 @@ def load_users_from_file(users_file):
         sys.exit(1)
 
 
+def filter_owners_and_pis_with_write_share_access(authorized_users):
+    """Filter users to show only owners and principal investigators with READ-WRITE-SHARE access.
+
+    Args:
+        authorized_users: List of user dictionaries with access information
+
+    Returns:
+        List of filtered user dictionaries containing only owners and PIs
+        with READ-WRITE-SHARE rights
+    """
+    # Define target roles (case-insensitive)
+    target_roles = {"owner", "principal investigator", "pi", "principal_investigator"}
+
+    # Define target access level - specifically READ-WRITE-SHARE
+    target_access = "READ-WRITE-SHARE"
+
+    filtered_users = []
+
+    for user in authorized_users:
+        user_role = user.get("role", "").lower()
+        user_access = user.get("access_level", "").upper()
+
+        # Check if user has target role and READ-WRITE-SHARE access
+        if user_role in target_roles and user_access == target_access:
+            filtered_users.append(user)
+
+    return filtered_users
+
+
 def parse_users_from_study_json(study_data):
     """Parse user information from study JSON data.
 
@@ -322,7 +423,7 @@ def parse_users_from_study_json(study_data):
     """
     users = []
 
-    # Add owners with READ-WRITE access
+    # Add owners with READ-WRITE-SHARE access
     owners = study_data.get("owners", [])
     for owner in owners:
         # Parse "Name (email)" format
@@ -333,12 +434,12 @@ def parse_users_from_study_json(study_data):
                 {
                     "name": f"{name_part} ({email_part})",
                     "role": "Owner",
-                    "access_level": "READ-WRITE",
+                    "access_level": "READ-WRITE-SHARE",
                     "expiration": "PERMANENT",
                 }
             )
         else:
-            users.append({"name": owner, "role": "Owner", "access_level": "READ-WRITE", "expiration": "PERMANENT"})
+            users.append({"name": owner, "role": "Owner", "access_level": "READ-WRITE-SHARE", "expiration": "PERMANENT"})
 
     # Add contributors with READ access
     contributors = study_data.get("contributors", [])
@@ -356,9 +457,7 @@ def parse_users_from_study_json(study_data):
                 }
             )
         else:
-            users.append(
-                {"name": contributor, "role": "Contributor", "access_level": "READ", "expiration": "PERMANENT"}
-            )
+            users.append({"name": contributor, "role": "Contributor", "access_level": "READ", "expiration": "PERMANENT"})
 
     # Add readers with READ access
     readers = study_data.get("readers", [])
@@ -378,6 +477,19 @@ def parse_users_from_study_json(study_data):
         else:
             users.append({"name": reader, "role": "Reader", "access_level": "READ", "expiration": "PERMANENT"})
 
+    # Add Principal Investigator with READ-WRITE-SHARE access
+    pi_name = study_data.get("effective_principal_investigator_name")
+    pi_email = study_data.get("effective_principal_investigator_email")
+
+    if pi_name:
+        pi_display_name = f"{pi_name} ({pi_email})" if pi_email else pi_name
+
+        # Check if PI is not already in owners list
+        pi_already_added = any(pi_display_name.lower() in user["name"].lower() for user in users)
+
+        if not pi_already_added:
+            users.append({"name": pi_display_name, "role": "Principal Investigator", "access_level": "READ-WRITE-SHARE", "expiration": "PERMANENT"})
+
     return users
 
 
@@ -396,6 +508,75 @@ def load_study_config(config_file):
     except Exception as e:
         print(f"Error loading study config file: {e}")
         sys.exit(1)
+
+
+def generate_notification_email(study_title, investigation_label, study_label, workpackage, folder_path, authorized_users, pi_name, pi_email, sensitivity_level):
+    """Generate email notification text for owners and PIs about folder creation.
+
+    Args:
+        study_title: Title of the study
+        investigation_label: Label for the investigation
+        study_label: Label for the study
+        workpackage: Workpackage identifier
+        folder_path: Path to the created folder
+        authorized_users: List of user dictionaries with access information
+        pi_name: Name of the Principal Investigator
+        pi_email: Contact email of the Principal Investigator
+        sensitivity_level: Data sensitivity level
+
+    Returns:
+        String containing the email notification text
+    """
+    # Filter to get only owners and PIs with READ-WRITE-SHARE access
+    write_share_users = filter_owners_and_pis_with_write_share_access(authorized_users)
+
+    # Create user list for email body
+    user_list = []
+    for user in write_share_users:
+        name = user.get("name", "")
+        role = user.get("role", "")
+        # Extract email from "Name (email)" format
+        if "(" in name and name.endswith(")"):
+            name_part = name.split("(")[0].strip()
+            email_part = name.split("(")[1].rstrip(")").strip()
+            user_list.append(f"  - {name_part} ({email_part}) ({role})")
+        else:
+            user_list.append(f"  - {name} ({role})")
+
+    user_list_text = "\n".join(user_list) if user_list else "  - No users with READ-WRITE-SHARE access found"
+
+    # Extract just the folder name from the full path
+    folder_name = os.path.basename(folder_path)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    return f"""Dear Researchers,
+
+Your study folder has been successfully created in the CropXR Research Drive.
+
+Study Details:
+- Study Title: {study_title or "N/A"}
+- Investigation Label: {investigation_label or "N/A"}
+- Study Label: {study_label or "N/A"}
+- Workpackage: {workpackage or "N/A"}
+- Folder Name: {folder_name}
+- Date Created: {today}
+- Principal Investigator: {pi_name or "N/A"}
+- Contact Email: {pi_email or "N/A"}
+- Data Sensitivity Level: {sensitivity_level or "Not specified"}
+
+Access Rights:
+The following users have been granted READ-WRITE-SHARE access to this folder:
+{user_list_text}
+
+Important Notes:
+- Please review the FOLDER_POLICY.md file in your study folder for detailed access control and data handling policies
+- Raw data must never be modified and should be stored in the designated raw data folder
+- All folder naming follows the convention: {investigation_label or "LABEL1"}-{study_label or "LABEL2"}_[FOLDER_TYPE]
+- For any questions or support, contact the Data Engineering Team at dataxr@cropxr.org
+
+Best regards,
+CropXR Data Management Team"""
 
 
 def main():
@@ -421,11 +602,14 @@ def main():
     parser.add_argument("--pi-email", help="Principal Investigator email")
     parser.add_argument("--users-file", help="JSON file with authorized users")
     parser.add_argument("--structure-file", help="JSON file with custom folder structure")
-    parser.add_argument(
-        "--overwrite", action="store_true", help="Overwrite existing FOLDER_POLICY.md file (folders are never deleted)"
-    )
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing FOLDER_POLICY.md file (folders are never deleted)")
+    parser.add_argument("--create-investigation-folder", action="store_true", help="Create investigation folder level (default: False)")
+    parser.add_argument("--no-email-notification", action="store_true", help="Skip printing email notification text")
 
     args = parser.parse_args()
+
+    # DEBUG: Print the create_investigation_folder value
+    print(f"DEBUG: args.create_investigation_folder = {args.create_investigation_folder}")
 
     # If study-config is provided, extract values from it
     if args.study_config:
@@ -457,13 +641,16 @@ def main():
         pi_email = args.pi_email or study_data.get("effective_principal_investigator_email")
 
         # Parse users from study data unless users-file is specified
-        if args.users_file:
-            authorized_users = load_users_from_file(args.users_file)
-        else:
-            authorized_users = parse_users_from_study_json(study_data)
+        authorized_users = load_users_from_file(args.users_file) if args.users_file else parse_users_from_study_json(study_data)
+
+        # Check if study config specifies investigation folder creation
+        # CLI argument takes precedence over JSON config
+        create_investigation_folder = args.create_investigation_folder
+        print(f"DEBUG: final create_investigation_folder = {create_investigation_folder}")
 
     else:
         # Use CLI arguments (original behavior)
+        # workpackage is always required for folder name generation
         if not all([args.investigation, args.study, args.workpackage]):
             error_msg = "When not using --study-config, -i/--investigation, -s/--study, and --workpackage are required"
             parser.error(error_msg)
@@ -476,13 +663,10 @@ def main():
         sensitivity_level = args.sensitivity
         pi_name = args.pi_name
         pi_email = args.pi_email
+        create_investigation_folder = args.create_investigation_folder
 
         # Generate study_slug from title if provided, otherwise use study label
-        if study_title:
-            # Convert title to slug: lowercase, replace spaces with hyphens, remove special chars
-            study_slug = re.sub(r"[^a-z0-9-]", "", study_title.lower().replace(" ", "-"))
-        else:
-            study_slug = study_label.lower()
+        study_slug = re.sub(r"[^a-z0-9-]", "", study_title.lower().replace(" ", "-")) if study_title else study_label.lower()
 
         # Load users if file provided
         authorized_users = []
@@ -514,9 +698,27 @@ def main():
             workpackage=workpackage,
             structure=structure,
             overwrite_existing=args.overwrite,
+            create_investigation_folder=create_investigation_folder,
         )
 
         print(f"Successfully created folder structure in: {created_folder}")
+
+        # Generate and print email notification unless disabled
+        if not args.no_email_notification:
+            print("\n" + "=" * 80)
+            email_notification = generate_notification_email(
+                study_title=study_title,
+                investigation_label=investigation_label,
+                study_label=study_label,
+                workpackage=workpackage,
+                folder_path=created_folder,
+                authorized_users=authorized_users,
+                pi_name=pi_name,
+                pi_email=pi_email,
+                sensitivity_level=sensitivity_level,
+            )
+            print(email_notification)
+
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
