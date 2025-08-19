@@ -332,7 +332,7 @@ All folders within this project follow a strict naming convention:
 
 ## Questions and Support
 For questions regarding this policy or data management assistance, please contact:
-- Data Engineering Team: dataxr@cropxr.org
+- Data Engineering Team: data@cropxr.org
 
 """
 
@@ -366,23 +366,6 @@ For questions regarding this policy or data management assistance, please contac
     return policy_path
 
 
-def load_users_from_file(users_file):
-    """Load authorized users from JSON file.
-
-    Args:
-        users_file: Path to JSON file containing user information
-
-    Returns:
-        List of user dictionaries
-    """
-    try:
-        with open(users_file, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Error loading users file: {e}")
-        sys.exit(1)
-
-
 def filter_owners_and_pis_with_write_share_access(authorized_users):
     """Filter users to show only owners and principal investigators with READ-WRITE-SHARE access.
 
@@ -394,7 +377,7 @@ def filter_owners_and_pis_with_write_share_access(authorized_users):
         with READ-WRITE-SHARE rights
     """
     # Define target roles (case-insensitive)
-    target_roles = {"owner", "principal investigator", "pi", "principal_investigator"}
+    target_roles = {"owner", "principal investigator", "pi", "principal_investigator", "dataset administrator", "dataset_administrator"}
 
     # Define target access level - specifically READ-WRITE-SHARE
     target_access = "READ-WRITE-SHARE"
@@ -423,72 +406,45 @@ def parse_users_from_study_json(study_data):
     """
     users = []
 
-    # Add owners with READ-WRITE-SHARE access
-    owners = study_data.get("owners", [])
-    for owner in owners:
-        # Parse "Name (email)" format
-        if "(" in owner and owner.endswith(")"):
-            name_part = owner.split("(")[0].strip()
-            email_part = owner.split("(")[1].rstrip(")").strip()
+    # Add Principal Investigator with READ-WRITE-SHARE access
+    pi_info = study_data.get("principal_investigator", {})
+    if pi_info:
+        pi_first_name = pi_info.get("first_name", "")
+        pi_last_name = pi_info.get("last_name", "")
+        pi_email = pi_info.get("email", "")
+
+        if pi_first_name or pi_last_name:
+            pi_name = f"{pi_first_name} {pi_last_name}".strip()
+            pi_display_name = f"{pi_name} ({pi_email})" if pi_email else pi_name
+
             users.append(
                 {
-                    "name": f"{name_part} ({email_part})",
-                    "role": "Owner",
+                    "name": pi_display_name,
+                    "role": "Principal Investigator",
                     "access_level": "READ-WRITE-SHARE",
                     "expiration": "PERMANENT",
                 }
             )
-        else:
-            users.append({"name": owner, "role": "Owner", "access_level": "READ-WRITE-SHARE", "expiration": "PERMANENT"})
 
-    # Add contributors with READ access
-    contributors = study_data.get("contributors", [])
-    for contributor in contributors:
-        # Parse "Name (email)" format
-        if "(" in contributor and contributor.endswith(")"):
-            name_part = contributor.split("(")[0].strip()
-            email_part = contributor.split("(")[1].rstrip(")").strip()
+    # Add Dataset Administrator with READ-WRITE-SHARE access
+    admin_info = study_data.get("dataset_administrator", {})
+    if admin_info:
+        admin_first_name = admin_info.get("first_name", "")
+        admin_last_name = admin_info.get("last_name", "")
+        admin_email = admin_info.get("email", "")
+
+        if admin_first_name or admin_last_name:
+            admin_name = f"{admin_first_name} {admin_last_name}".strip()
+            admin_display_name = f"{admin_name} ({admin_email})" if admin_email else admin_name
+
             users.append(
                 {
-                    "name": f"{name_part} ({email_part})",
-                    "role": "Contributor",
-                    "access_level": "READ",
+                    "name": admin_display_name,
+                    "role": "Dataset Administrator",
+                    "access_level": "READ-WRITE-SHARE",
                     "expiration": "PERMANENT",
                 }
             )
-        else:
-            users.append({"name": contributor, "role": "Contributor", "access_level": "READ", "expiration": "PERMANENT"})
-
-    # Add readers with READ access
-    readers = study_data.get("readers", [])
-    for reader in readers:
-        # Parse "Name (email)" format
-        if "(" in reader and reader.endswith(")"):
-            name_part = reader.split("(")[0].strip()
-            email_part = reader.split("(")[1].rstrip(")").strip()
-            users.append(
-                {
-                    "name": f"{name_part} ({email_part})",
-                    "role": "Reader",
-                    "access_level": "READ",
-                    "expiration": "PERMANENT",
-                }
-            )
-        else:
-            users.append({"name": reader, "role": "Reader", "access_level": "READ", "expiration": "PERMANENT"})
-
-    # Add Principal Investigator with READ-WRITE-SHARE access
-    pi_name = study_data.get("effective_principal_investigator_name")
-    pi_email = study_data.get("effective_principal_investigator_email")
-
-    if pi_name:
-        pi_display_name = f"{pi_name} ({pi_email})" if pi_email else pi_name
-
-        # Check if PI is not already in owners list
-        pi_already_added = any(pi_display_name.lower() in user["name"].lower() for user in users)
-
-        if not pi_already_added:
-            users.append({"name": pi_display_name, "role": "Principal Investigator", "access_level": "READ-WRITE-SHARE", "expiration": "PERMANENT"})
 
     return users
 
@@ -583,10 +539,10 @@ def main():
     """Command line entry point."""
     parser = argparse.ArgumentParser(description="Create research folder structures with policy management")
 
-    # Add new argument for study config JSON
+    # Study config JSON is now the primary method
     parser.add_argument("--study-config", help="JSON file containing complete study configuration")
 
-    # Keep existing arguments but make some optional when using study-config
+    # Keep existing arguments for direct usage
     parser.add_argument("-i", "--investigation", help="Investigation label")
     parser.add_argument("-s", "--study", help="Study label")
     parser.add_argument("--study_title", help="Study title (also used to generate study_slug)")
@@ -600,7 +556,6 @@ def main():
     )
     parser.add_argument("--pi-name", help="Principal Investigator name")
     parser.add_argument("--pi-email", help="Principal Investigator email")
-    parser.add_argument("--users-file", help="JSON file with authorized users")
     parser.add_argument("--structure-file", help="JSON file with custom folder structure")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing FOLDER_POLICY.md file (folders are never deleted)")
     parser.add_argument("--create-investigation-folder", action="store_true", help="Create investigation folder level (default: False)")
@@ -636,15 +591,21 @@ def main():
         }
         sensitivity_level = args.sensitivity or sensitivity_map.get(security_level)
 
-        # Get PI information - always prefer effective fields
-        pi_name = args.pi_name or study_data.get("effective_principal_investigator_name")
-        pi_email = args.pi_email or study_data.get("effective_principal_investigator_email")
+        # Get PI information from nested object
+        pi_info = study_data.get("principal_investigator", {})
+        if pi_info:
+            pi_first_name = pi_info.get("first_name", "")
+            pi_last_name = pi_info.get("last_name", "")
+            pi_name = args.pi_name or f"{pi_first_name} {pi_last_name}".strip()
+            pi_email = args.pi_email or pi_info.get("email", "")
+        else:
+            pi_name = args.pi_name
+            pi_email = args.pi_email
 
-        # Parse users from study data unless users-file is specified
-        authorized_users = load_users_from_file(args.users_file) if args.users_file else parse_users_from_study_json(study_data)
+        # Parse users from study data (PI and dataset administrator)
+        authorized_users = parse_users_from_study_json(study_data)
 
-        # Check if study config specifies investigation folder creation
-        # CLI argument takes precedence over JSON config
+        # CLI argument takes precedence over JSON config for investigation folder creation
         create_investigation_folder = args.create_investigation_folder
         print(f"DEBUG: final create_investigation_folder = {create_investigation_folder}")
 
@@ -668,10 +629,8 @@ def main():
         # Generate study_slug from title if provided, otherwise use study label
         study_slug = re.sub(r"[^a-z0-9-]", "", study_title.lower().replace(" ", "-")) if study_title else study_label.lower()
 
-        # Load users if file provided
+        # No users when using CLI arguments directly
         authorized_users = []
-        if args.users_file:
-            authorized_users = load_users_from_file(args.users_file)
 
     # Load custom structure if file provided
     structure = None
