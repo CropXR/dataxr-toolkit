@@ -22,6 +22,8 @@ def create_folder_structure(
     structure=None,
     overwrite_existing=False,
     create_investigation_folder=False,
+    investigation_title=None,
+    description=None,
 ):
     """Create a folder structure with focus on data organization by type.
 
@@ -43,6 +45,8 @@ def create_folder_structure(
         structure: A nested dictionary defining the folder structure
         overwrite_existing: Whether to overwrite existing FOLDER_POLICY.md file (folders are never deleted)
         create_investigation_folder: Whether to create the investigation folder level (default: False)
+        investigation_title: Title of the investigation
+        description: Description of the study
 
     Returns:
         Path to the created main folder
@@ -151,12 +155,12 @@ def create_folder_structure(
             "metadata": None,
         }
 
-    # Apply labels to all first-level folders if provided
-    if investigation_label and study_label:
+    # Apply study label only to all first-level folders if provided
+    if study_label:
         new_structure = {}
         for folder_name_key, folder_content in structure.items():
-            # Create new labeled folder name
-            labeled_folder = f"{investigation_label}-{study_label}_{folder_name_key}"
+            # Create new labeled folder name with only study label
+            labeled_folder = f"{study_label}_{folder_name_key}"
             new_structure[labeled_folder] = folder_content
 
         # Replace original structure with labeled structure
@@ -210,6 +214,8 @@ def create_folder_structure(
         pi_email,
         workpackage,
         overwrite_existing,
+        investigation_title,
+        description,
     )
 
     return main_folder_path
@@ -227,6 +233,8 @@ def create_folder_policy(
     pi_email=None,
     workpackage=None,
     overwrite_existing=False,
+    investigation_title=None,
+    description=None,
 ):
     """Create a FOLDER_POLICY.md file focused on data organization.
 
@@ -245,6 +253,8 @@ def create_folder_policy(
         pi_email: Contact email of the Principal Investigator
         workpackage: Workpackage identifier
         overwrite_existing: Whether to overwrite existing FOLDER_POLICY.md file
+        investigation_title: Title of the investigation
+        description: Description of the study
 
     Returns:
         Path to the created policy file
@@ -278,6 +288,8 @@ def create_folder_policy(
 
 ## Study Information
 - **Study Title**: {study_title or "[Study Title]"}
+- **Study Description**: {description or "[Study Description]"}
+- **Investigation Title**: {investigation_title or "[Investigation Title]"}
 - **Investigation Label**: {inv_label}
 - **Study Label**: {study_lab}
 - **Workpackage**: {workpackage or "[Workpackage ID]"}
@@ -306,24 +318,78 @@ The following individuals or groups have READ-WRITE-SHARE access to this folder 
 ## Folder Naming Convention
 All folders within this project follow a strict naming convention:
 
-- All first-level folders are prefixed with: **{inv_label}-{study_lab}_**
+- All first-level folders are prefixed with: **{study_lab}_**
 - Examples:
-  - Raw data folder: **{inv_label}-{study_lab}_raw**
-  - Processed data folder: **{inv_label}-{study_lab}_processed**
-  - Metadata folder: **{inv_label}-{study_lab}_metadata**
-  - Analysis folder: **{inv_label}-{study_lab}_analysis**
-  - Documentation folder: **{inv_label}-{study_lab}_documentation**
+  - Raw data folder: **{study_lab}_raw**
+  - Processed data folder: **{study_lab}_processed**
+  - Metadata folder: **{study_lab}_metadata**
+  - Analysis folder: **{study_lab}_analysis**
+  - Documentation folder: **{study_lab}_documentation**
+
+### Example Folder Structure
+```
+s_{workpackage}-{inv_label}-{study_lab}_plant-stress-response-analysis/
+├── {study_lab}_raw/
+│   ├── {study_lab}_raw_rnaseq/
+│   ├── {study_lab}_raw_metabolomics/
+│   └── {study_lab}_raw_phenotyping/
+├── {study_lab}_processed/
+│   ├── {study_lab}_processed_rnaseq/
+│   │   ├── {study_lab}_processed_rnaseq_counts/
+│   │   ├── {study_lab}_processed_rnaseq_normalized/
+│   │   └── {study_lab}_processed_rnaseq_differential/
+│   ├── {study_lab}_processed_metabolomics/
+│   │   ├── {study_lab}_processed_metabolomics_identified/
+│   │   └── {study_lab}_processed_metabolomics_quantified/
+│   └── {study_lab}_processed_integrated/
+├── {study_lab}_analysis/
+│   ├── {study_lab}_analysis_scripts/
+│   ├── {study_lab}_analysis_results/
+│   └── {study_lab}_analysis_figures/
+├── {study_lab}_metadata/
+├── {study_lab}_documentation/
+└── FOLDER_POLICY.md
+```
+
+This way, you can share every folder without losing track of the original data source.
+We recommend using a low number of subfolder levels.
 
 ## Data Handling Policies
 
 ### Raw Data
 - Raw data must never be modified
-- All raw data files must be stored in the **{inv_label}-{study_lab}_raw** folder
+- All raw data files must be stored in the **{study_lab}_raw** folder
 
-### Other Data Folders
-- All first-level folders follow the naming convention **{inv_label}-{study_lab}_[FOLDER_TYPE]**
+### Folder Structure Guidelines
+- All first-level folders follow the naming convention **{study_lab}_[FOLDER_TYPE]**
+- **Keep folder nesting to a minimum** (recommended maximum 2-3 levels)
+- Use **descriptive filenames instead of deep folder hierarchies** to organize data
 - Files within these folders should maintain consistent naming where applicable
 - Cross-references between folders should maintain traceability to original data sources
+
+### File Naming Best Practices
+- **Encode metadata in filenames, not folder structures**
+- Example: `{study_lab}_batch1_sample1_rep1_timepoint1_forward.fastq`
+- Rather than: creating separate folders for each batch/sample/replicate
+- Benefits:
+  - Files are self-documenting and retain context when shared
+  - Easier to search, filter, and process programmatically
+  - Prevents deep folder hierarchies that become difficult to navigate
+  - All related files visible in a single directory view
+
+### Example File Organization
+```
+{study_lab}_raw_rnaseq/
+├── {study_lab}_batch1_sample1_rep1_timepoint1_forward.fastq
+├── {study_lab}_batch1_sample1_rep1_timepoint1_reverse.fastq
+├── {study_lab}_batch1_sample2_rep1_timepoint1_forward.fastq
+└── {study_lab}_batch2_sample1_rep1_timepoint2_forward.fastq
+
+{study_lab}_processed_rnaseq_counts/
+├── {study_lab}_batch1_sample1_counts.txt
+├── {study_lab}_batch1_sample2_counts.txt
+└── {study_lab}_batch2_sample1_counts.txt
+```
 
 ## Metadata Guidelines
 - Metadata should be comprehensive and follow applicable standards
@@ -449,7 +515,48 @@ def parse_users_from_study_json(study_data):
     return users
 
 
-def load_study_config(config_file):
+def parse_users_from_cli_args(pi_name, pi_email, dataset_admin_name, dataset_admin_email):
+    """Parse user information from CLI arguments.
+
+    Args:
+        pi_name: Principal Investigator name
+        pi_email: Principal Investigator email
+        dataset_admin_name: Dataset Administrator name
+        dataset_admin_email: Dataset Administrator email
+
+    Returns:
+        List of user dictionaries with name, role, and access_level
+    """
+    users = []
+
+    # Add Principal Investigator with READ-WRITE-SHARE access
+    if pi_name:
+        pi_display_name = f"{pi_name} ({pi_email})" if pi_email else pi_name
+        users.append(
+            {
+                "name": pi_display_name,
+                "role": "Principal Investigator",
+                "access_level": "READ-WRITE-SHARE",
+                "expiration": "PERMANENT",
+            }
+        )
+
+    # Add Dataset Administrator with READ-WRITE-SHARE access
+    if dataset_admin_name:
+        admin_display_name = f"{dataset_admin_name} ({dataset_admin_email})" if dataset_admin_email else dataset_admin_name
+        users.append(
+            {
+                "name": admin_display_name,
+                "role": "Dataset Administrator",
+                "access_level": "READ-WRITE-SHARE",
+                "expiration": "PERMANENT",
+            }
+        )
+
+    return users
+
+
+def load_data(config_file):
     """Load study configuration from JSON file.
 
     Args:
@@ -528,8 +635,13 @@ The following users have been granted READ-WRITE-SHARE access to this folder:
 Important Notes:
 - Please review the FOLDER_POLICY.md file in your study folder for detailed access control and data handling policies
 - Raw data must never be modified and should be stored in the designated raw data folder
-- All folder naming follows the convention: {investigation_label or "LABEL1"}-{study_label or "LABEL2"}_[FOLDER_TYPE]
+- All folder naming follows the convention: {study_label or "LABEL2"}_[FOLDER_TYPE]
 - For any questions or support, contact the Data Engineering Team at dataxr@cropxr.org
+
+Metadata Templates:
+- Please find the location of the most recent metadata spreadsheets at the bottom of this URL:
+
+    https://solisservices.sharepoint.com/sites/11017/datamanagement/SitePages/Home.aspx
 
 Best regards,
 CropXR Data Management Team"""
@@ -540,7 +652,7 @@ def main():
     parser = argparse.ArgumentParser(description="Create research folder structures with policy management")
 
     # Study config JSON is now the primary method
-    parser.add_argument("--study-config", help="JSON file containing complete study configuration")
+    parser.add_argument("--data", help="JSON file containing complete study configuration")
 
     # Keep existing arguments for direct usage
     parser.add_argument("-i", "--investigation", help="Investigation label")
@@ -556,6 +668,11 @@ def main():
     )
     parser.add_argument("--pi-name", help="Principal Investigator name")
     parser.add_argument("--pi-email", help="Principal Investigator email")
+    parser.add_argument("--dataset-admin-name", help="Dataset Administrator name")
+    parser.add_argument("--dataset-admin-email", help="Dataset Administrator email")
+    parser.add_argument("--investigation-title", help="Investigation title")
+    parser.add_argument("--description", help="Study description")
+    parser.add_argument("--slug", help="Study slug")
     parser.add_argument("--structure-file", help="JSON file with custom folder structure")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing FOLDER_POLICY.md file (folders are never deleted)")
     parser.add_argument("--create-investigation-folder", action="store_true", help="Create investigation folder level (default: False)")
@@ -565,10 +682,11 @@ def main():
 
     # DEBUG: Print the create_investigation_folder value
     print(f"DEBUG: args.create_investigation_folder = {args.create_investigation_folder}")
+    print(f"DEBUG: args.no_email_notification = {args.no_email_notification}")
 
-    # If study-config is provided, extract values from it
-    if args.study_config:
-        study_data = load_study_config(args.study_config)
+    # If data is provided, extract values from it
+    if args.data:
+        study_data = load_data(args.data)
 
         # Extract values from JSON, allowing CLI args to override
         folder_name = args.folder_name or study_data.get("folder_name")
@@ -578,8 +696,14 @@ def main():
         investigation_label = args.investigation or study_data.get("investigation_accession_code")
         study_label = args.study or study_data.get("accession_code")
 
+        print(f"DEBUG: workpackage = '{workpackage}'")
+        print(f"DEBUG: investigation_label = '{investigation_label}'")
+        print(f"DEBUG: study_label = '{study_label}'")
+
         study_title = args.study_title or study_data.get("title")
-        study_slug = study_data.get("slug")
+        study_slug = args.slug or study_data.get("slug")
+        investigation_title = args.investigation_title or study_data.get("investigation_title")
+        description = args.description or study_data.get("description")
 
         # Map security_level to sensitivity
         security_level = study_data.get("security_level", "").upper()
@@ -605,32 +729,44 @@ def main():
         # Parse users from study data (PI and dataset administrator)
         authorized_users = parse_users_from_study_json(study_data)
 
+        # Override with CLI args if provided
+        dataset_admin_name = args.dataset_admin_name
+        dataset_admin_email = args.dataset_admin_email
+
+        # If CLI args provided for users, use those instead
+        if args.pi_name or args.dataset_admin_name:
+            authorized_users = parse_users_from_cli_args(pi_name, pi_email, dataset_admin_name, dataset_admin_email)
+
         # CLI argument takes precedence over JSON config for investigation folder creation
         create_investigation_folder = args.create_investigation_folder
-        print(f"DEBUG: final create_investigation_folder = {create_investigation_folder}")
+        print(f"DEBUG: final create_investigation_folder from JSON path = {create_investigation_folder}")
 
     else:
         # Use CLI arguments (original behavior)
         # workpackage is always required for folder name generation
         if not all([args.investigation, args.study, args.workpackage]):
-            error_msg = "When not using --study-config, -i/--investigation, -s/--study, and --workpackage are required"
+            error_msg = "When not using --data, -i/--investigation, -s/--study, and --workpackage are required"
             parser.error(error_msg)
 
         investigation_label = args.investigation
         study_label = args.study
         study_title = args.study_title
+        study_slug = args.slug
         workpackage = args.workpackage
         folder_name = args.folder_name
         sensitivity_level = args.sensitivity
         pi_name = args.pi_name
         pi_email = args.pi_email
+        investigation_title = args.investigation_title
+        description = args.description
         create_investigation_folder = args.create_investigation_folder
 
-        # Generate study_slug from title if provided, otherwise use study label
-        study_slug = re.sub(r"[^a-z0-9-]", "", study_title.lower().replace(" ", "-")) if study_title else study_label.lower()
+        # Generate study_slug from title if neither slug nor title provided, fallback to study label
+        if not study_slug:
+            study_slug = re.sub(r"[^a-z0-9-]", "", study_title.lower().replace(" ", "-")) if study_title else study_label.lower() if study_label else "study"
 
-        # No users when using CLI arguments directly
-        authorized_users = []
+        # Parse users from CLI arguments
+        authorized_users = parse_users_from_cli_args(pi_name, pi_email, args.dataset_admin_name, args.dataset_admin_email)
 
     # Load custom structure if file provided
     structure = None
@@ -658,6 +794,8 @@ def main():
             structure=structure,
             overwrite_existing=args.overwrite,
             create_investigation_folder=create_investigation_folder,
+            investigation_title=investigation_title,
+            description=description,
         )
 
         print(f"Successfully created folder structure in: {created_folder}")
@@ -665,6 +803,8 @@ def main():
         # Generate and print email notification unless disabled
         if not args.no_email_notification:
             print("\n" + "=" * 80)
+            print("EMAIL NOTIFICATION:")
+            print("=" * 80)
             email_notification = generate_notification_email(
                 study_title=study_title,
                 investigation_label=investigation_label,
@@ -677,6 +817,7 @@ def main():
                 sensitivity_level=sensitivity_level,
             )
             print(email_notification)
+            print("=" * 80)
 
     except Exception as e:
         print(f"Error: {e}")
