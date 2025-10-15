@@ -7,7 +7,9 @@ authors = [
 description = "Tools for DataXR"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+  "requests>=2.31.0,<3",
+]
 
 [tool.uv]
 dev-dependencies = [

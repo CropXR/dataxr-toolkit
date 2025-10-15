@@ -23,7 +23,25 @@ No additional dependencies required - uses only Python standard library modules.
 
 ## Usage
 
-### Using JSON Configuration File (Recommended)
+### Using CropXR API (Recommended)
+
+Fetch study data directly from the CropXR API:
+
+```bash
+# Using environment variable for authentication
+export CROPXR_API_TOKEN='your_token_here'
+dataxr-create-study-folder --api-url https://cropxr.ewi.tudelft.nl/api/v3/studies/CXRS35/
+
+# Or pass token directly
+dataxr-create-study-folder --api-url https://cropxr.ewi.tudelft.nl/api/v3/studies/CXRS35/ --api-token your_token_here
+
+# With custom target directory
+dataxr-create-study-folder --api-url https://cropxr.ewi.tudelft.nl/api/v3/studies/CXRS35/ -t /data/projects
+```
+
+**Note**: The API token should use the format `Token your_token_here` (not Bearer). You can store your token in a `.env` file with `CROPXR_API_TOKEN=your_token_here`.
+
+### Using JSON Configuration File
 
 ```bash
 dataxr-create-study-folder --study-config study_config.json
@@ -45,10 +63,12 @@ dataxr-create-study-folder --study-config study_config.json --create-investigati
 
 | Argument | Description | Required |
 |----------|-------------|----------|
-| `--study-config` | JSON file containing complete study configuration | When not using CLI args |
-| `-i, --investigation` | Investigation label | When not using config file |
-| `-s, --study` | Study label | When not using config file |
-| `--workpackage` | Workpackage identifier | When not using config file |
+| `--api-url` | CropXR API URL for study data (e.g., https://cropxr.ewi.tudelft.nl/api/v3/studies/CXRS35/) | When using API mode |
+| `--api-token` | API authentication token (or use CROPXR_API_TOKEN env var) | When using API mode |
+| `--study-config` | JSON file containing complete study configuration | When not using API or CLI args |
+| `-i, --investigation` | Investigation label | When not using API or config file |
+| `-s, --study` | Study label | When not using API or config file |
+| `--workpackage` | Workpackage identifier | When not using API or config file |
 | `--study_title` | Study title | Optional |
 | `-t, --target` | Target path (default: current directory) | Optional |
 | `--folder-name` | Custom folder name (overrides default pattern) | Optional |
@@ -212,6 +232,18 @@ Automatically generated text suitable for notifying stakeholders about folder cr
 - Contact information
 
 ## Example Commands
+
+### Using API (Recommended)
+```bash
+# Set token as environment variable
+export CROPXR_API_TOKEN='your_token_here'
+
+# Fetch from API
+dataxr-create-study-folder --api-url https://cropxr.ewi.tudelft.nl/api/v3/studies/CXRS35/
+
+# With custom target directory
+dataxr-create-study-folder --api-url https://cropxr.ewi.tudelft.nl/api/v3/studies/CXRS35/ -t /data/projects
+```
 
 ### Basic Usage with Config File
 ```bash

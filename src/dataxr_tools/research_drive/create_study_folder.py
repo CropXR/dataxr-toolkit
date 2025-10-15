@@ -6,6 +6,8 @@ import shutil
 import sys
 from datetime import datetime
 
+import requests
+
 
 def create_folder_structure(
     target_path,
@@ -573,6 +575,46 @@ def load_data(config_file):
         sys.exit(1)
 
 
+def fetch_study_from_api(api_url, api_token=None):
+    """Fetch study configuration from CropXR API.
+
+    Args:
+        api_url: Full URL to the API endpoint (e.g., https://cropxr.ewi.tudelft.nl/api/v3/studies/CXRS35/)
+        api_token: Optional API token for authentication. Can also be set via CROPXR_API_TOKEN environment variable.
+
+    Returns:
+        Dictionary containing study configuration
+
+    Raises:
+        SystemExit: If the API request fails
+    """
+    try:
+        print(f"Fetching study data from API: {api_url}")
+
+        # Get API token from argument or environment variable
+        token = api_token or os.environ.get("CROPXR_API_TOKEN")
+
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Token {token}"
+            print("Using authentication token")
+
+        response = requests.get(api_url, headers=headers, timeout=30)
+        response.raise_for_status()
+
+        study_data = response.json()
+        print(f"Successfully fetched study data for: {study_data.get('accession_code', 'Unknown')}")
+        return study_data
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching study data from API: {e}")
+        if "401" in str(e):
+            print("Authentication required. Please provide --api-token or set CROPXR_API_TOKEN environment variable.")
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON response from API: {e}")
+        sys.exit(1)
+
+
 def generate_notification_email(study_title, investigation_label, study_label, workpackage, folder_path, authorized_users, pi_name, pi_email, sensitivity_level):
     """Generate email notification text for owners and PIs about folder creation.
 
@@ -653,6 +695,8 @@ def main():
 
     # Study config JSON is now the primary method
     parser.add_argument("--data", help="JSON file containing complete study configuration")
+    parser.add_argument("--api-url", help="API URL to fetch study data from (e.g., https://cropxr.ewi.tudelft.nl/api/v3/studies/CXRS35/)")
+    parser.add_argument("--api-token", help="API token for authentication (can also be set via CROPXR_API_TOKEN environment variable)")
 
     # Keep existing arguments for direct usage
     parser.add_argument("-i", "--investigation", help="Investigation label")
@@ -684,9 +728,14 @@ def main():
     print(f"DEBUG: args.create_investigation_folder = {args.create_investigation_folder}")
     print(f"DEBUG: args.no_email_notification = {args.no_email_notification}")
 
-    # If data is provided, extract values from it
-    if args.data:
-        study_data = load_data(args.data)
+    # Check if both --data and --api-url are provided
+    if args.data and args.api_url:
+        parser.error("Cannot specify both --data and --api-url. Please use only one.")
+
+    # If data or api-url is provided, extract values from it
+    if args.data or args.api_url:
+        # Fetch study data from API or load from file
+        study_data = fetch_study_from_api(args.api_url, args.api_token) if args.api_url else load_data(args.data)
 
         # Extract values from JSON, allowing CLI args to override
         folder_name = args.folder_name or study_data.get("folder_name")
