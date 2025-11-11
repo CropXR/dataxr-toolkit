@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 try:
-    from dataxr_tools.research_drive.create_study_folder import (
+    from dataxr_toolkit.research_drive.create_study_folder import (
         create_folder_policy,
         create_folder_structure,
         load_data,

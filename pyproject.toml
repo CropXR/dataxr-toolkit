@@ -1,10 +1,10 @@
 [project]
-name = "DataXR-Tools"
+name = "dataxr-toolkit"
 dynamic = ["version"]
 authors = [
   { name = "Sören Wacker", email = "s.wacker@tudelft.nl" },
 ]
-description = "Tools for DataXR"
+description = "Toolkit for DataXR"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -36,7 +36,7 @@ version-file = "_version.py"
 Homepage = "git@github.com:CropXR/DataXR-Tools.git"
 
 [project.scripts]
-dataxr-create-study-folder = "dataxr_tools.research_drive.create_study_folder:main"
+dataxr-create-study-folder = "dataxr_toolkit.research_drive.create_study_folder:main"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -51,7 +51,7 @@ testpaths = [
 ]
 
 [tool.coverage]
-run.source = ["dataxr_tools"]
+run.source = ["dataxr_toolkit"]
 port.exclude_lines = [
   'pragma: no cover',
   '\.\.\.',
