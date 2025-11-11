@@ -6,7 +6,7 @@ authors = [
 ]
 description = "Toolkit for DataXR"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 dependencies = [
   "requests>=2.31.0,<3",
 ]
