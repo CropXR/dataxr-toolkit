@@ -1,7 +1,8 @@
+import json
 import os
 import shutil
 import tempfile
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -9,7 +10,8 @@ try:
     from dataxr_tools.research_drive.create_study_folder import (
         create_folder_policy,
         create_folder_structure,
-        load_study_config,
+        load_data,
+        main,
         parse_users_from_study_json,
     )
 except ImportError as e:
@@ -54,9 +56,7 @@ class TestFolderStructureCreation:
     def test_create_folder_structure_with_custom_name(self, temp_dir):
         """Test creating folder structure with custom folder name."""
         custom_name = "custom_project_folder"
-        result_path = create_folder_structure(
-            target_path=temp_dir, folder_name=custom_name, investigation_label="TEST1", study_label="TEST2"
-        )
+        result_path = create_folder_structure(target_path=temp_dir, folder_name=custom_name, investigation_label="TEST1", study_label="TEST2")
 
         expected_path = os.path.join(temp_dir, custom_name)
         assert result_path == expected_path
@@ -342,10 +342,10 @@ class TestUserParsing:
 class TestConfigLoading:
     """Test configuration loading functionality."""
 
-    def test_load_study_config_file_not_found(self):
+    def test_load_data_file_not_found(self):
         """Test that missing config file causes system exit."""
         with pytest.raises(SystemExit) as exc_info:
-            load_study_config("nonexistent.json")
+            load_data("nonexistent.json")
         assert exc_info.value.code == 1
 
 
@@ -539,3 +539,742 @@ class TestMainFunctionIntegration:
         expected_path = os.path.join(temp_dir, "custom_folder")
         assert result_path == expected_path
         assert os.path.exists(expected_path)
+
+
+class TestCommandLineArguments:
+    """Test command line argument parsing and main function behavior."""
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create temporary directory for tests."""
+        test_dir = tempfile.mkdtemp()
+        yield test_dir
+        shutil.rmtree(test_dir)
+
+    def test_basic_cli_args(self, temp_dir):
+        """Test basic required CLI arguments: investigation, study, workpackage."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check that folder was created
+        expected_folder = "s_WP1-TEST1-TEST2_test2"
+        expected_path = os.path.join(temp_dir, expected_folder)
+        assert os.path.exists(expected_path)
+
+    def test_cli_with_study_title_arg(self, temp_dir):
+        """Test --study_title CLI argument."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--study_title",
+            "My Test Study",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check folder was created with slug from title
+        expected_folder = "s_WP1-TEST1-TEST2_my-test-study"
+        expected_path = os.path.join(temp_dir, expected_folder)
+        assert os.path.exists(expected_path)
+
+        # Check policy file contains the title
+        policy_path = os.path.join(expected_path, "FOLDER_POLICY.md")
+        with open(policy_path) as f:
+            content = f.read()
+        assert "My Test Study" in content
+
+    def test_cli_with_custom_slug(self, temp_dir):
+        """Test --slug CLI argument."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--slug",
+            "custom-slug-name",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        expected_folder = "s_WP1-TEST1-TEST2_custom-slug-name"
+        expected_path = os.path.join(temp_dir, expected_folder)
+        assert os.path.exists(expected_path)
+
+    def test_cli_with_folder_name_arg(self, temp_dir):
+        """Test --folder-name CLI argument."""
+        test_args = [
+            "create_study_folder.py",
+            "--folder-name",
+            "my-custom-folder",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        expected_path = os.path.join(temp_dir, "my-custom-folder")
+        assert os.path.exists(expected_path)
+
+    def test_cli_with_sensitivity_arg(self, temp_dir):
+        """Test --sensitivity CLI argument with all valid choices."""
+        sensitivity_levels = ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
+
+        for level in sensitivity_levels:
+            test_args = [
+                "create_study_folder.py",
+                "-i",
+                "TEST1",
+                "-s",
+                "TEST2",
+                "--workpackage",
+                "WP1",
+                "--sensitivity",
+                level,
+                "-t",
+                temp_dir,
+                "--no-email-notification",
+            ]
+
+            with patch("sys.argv", test_args):
+                main()
+
+            # Check policy file contains the sensitivity level
+            expected_folder = "s_WP1-TEST1-TEST2_test2"
+            policy_path = os.path.join(temp_dir, expected_folder, "FOLDER_POLICY.md")
+            with open(policy_path) as f:
+                content = f.read()
+            assert level in content
+
+    def test_cli_with_pi_args(self, temp_dir):
+        """Test --pi-name and --pi-email CLI arguments."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--pi-name",
+            "Dr. Jane Smith",
+            "--pi-email",
+            "jane.smith@example.org",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check policy file contains PI information
+        expected_folder = "s_WP1-TEST1-TEST2_test2"
+        policy_path = os.path.join(temp_dir, expected_folder, "FOLDER_POLICY.md")
+        with open(policy_path) as f:
+            content = f.read()
+        assert "Dr. Jane Smith" in content
+        assert "jane.smith@example.org" in content
+
+    def test_cli_with_dataset_admin_args(self, temp_dir):
+        """Test --dataset-admin-name and --dataset-admin-email CLI arguments."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--dataset-admin-name",
+            "Dr. Bob Jones",
+            "--dataset-admin-email",
+            "bob.jones@example.org",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check policy file contains dataset admin information
+        expected_folder = "s_WP1-TEST1-TEST2_test2"
+        policy_path = os.path.join(temp_dir, expected_folder, "FOLDER_POLICY.md")
+        with open(policy_path) as f:
+            content = f.read()
+        assert "Dr. Bob Jones" in content
+        assert "bob.jones@example.org" in content
+
+    def test_cli_with_investigation_title_arg(self, temp_dir):
+        """Test --investigation-title CLI argument."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--investigation-title",
+            "My Investigation Title",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check policy file contains investigation title
+        expected_folder = "s_WP1-TEST1-TEST2_test2"
+        policy_path = os.path.join(temp_dir, expected_folder, "FOLDER_POLICY.md")
+        with open(policy_path) as f:
+            content = f.read()
+        assert "My Investigation Title" in content
+
+    def test_cli_with_description_arg(self, temp_dir):
+        """Test --description CLI argument."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--description",
+            "This is a test study description",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check policy file contains description
+        expected_folder = "s_WP1-TEST1-TEST2_test2"
+        policy_path = os.path.join(temp_dir, expected_folder, "FOLDER_POLICY.md")
+        with open(policy_path) as f:
+            content = f.read()
+        assert "This is a test study description" in content
+
+    def test_cli_with_structure_file_arg(self, temp_dir):
+        """Test --structure-file CLI argument."""
+        # Create a custom structure JSON file
+        structure = {
+            "custom_raw": None,
+            "custom_processed": ["batch1", "batch2"],
+            "custom_analysis": None,
+        }
+        structure_file = os.path.join(temp_dir, "custom_structure.json")
+        with open(structure_file, "w") as f:
+            json.dump(structure, f)
+
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--structure-file",
+            structure_file,
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check custom structure was created
+        expected_folder = "s_WP1-TEST1-TEST2_test2"
+        expected_path = os.path.join(temp_dir, expected_folder)
+
+        # Check labeled folders exist
+        assert os.path.exists(os.path.join(expected_path, "TEST2_custom_raw"))
+        assert os.path.exists(os.path.join(expected_path, "TEST2_custom_processed"))
+        assert os.path.exists(os.path.join(expected_path, "TEST2_custom_analysis"))
+        assert os.path.exists(os.path.join(expected_path, "TEST2_custom_processed", "batch1"))
+        assert os.path.exists(os.path.join(expected_path, "TEST2_custom_processed", "batch2"))
+
+    def test_cli_overwrite_flag(self, temp_dir):
+        """Test --overwrite flag for FOLDER_POLICY.md file."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--study_title",
+            "First Title",
+            "--slug",
+            "test-study",  # Use fixed slug
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        # Create initial folder
+        with patch("sys.argv", test_args):
+            main()
+
+        expected_folder = "s_WP1-TEST1-TEST2_test-study"
+        policy_path = os.path.join(temp_dir, expected_folder, "FOLDER_POLICY.md")
+
+        # Verify first title is in policy
+        with open(policy_path) as f:
+            content = f.read()
+        assert "First Title" in content
+
+        # Try to update without overwrite flag
+        test_args_no_overwrite = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--study_title",
+            "Second Title",
+            "--slug",
+            "test-study",  # Use same slug
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args_no_overwrite):
+            main()
+
+        # Policy should still have first title
+        with open(policy_path) as f:
+            content = f.read()
+        assert "First Title" in content
+        assert "Second Title" not in content
+
+        # Update with overwrite flag
+        test_args_with_overwrite = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--study_title",
+            "Second Title",
+            "--slug",
+            "test-study",  # Use same slug
+            "-t",
+            temp_dir,
+            "--overwrite",
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args_with_overwrite):
+            main()
+
+        # Policy should now have second title
+        with open(policy_path) as f:
+            content = f.read()
+        assert "Second Title" in content
+
+        # Backup file should exist
+        backup_files = [f for f in os.listdir(os.path.join(temp_dir, expected_folder)) if f.startswith("FOLDER_POLICY.md.bak.")]
+        assert len(backup_files) >= 1
+
+    def test_cli_create_investigation_folder_flag(self, temp_dir):
+        """Test --create-investigation-folder flag."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--create-investigation-folder",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check that investigation folder was created
+        investigation_folder = "i_WP1_TEST1"
+        investigation_path = os.path.join(temp_dir, investigation_folder)
+        assert os.path.exists(investigation_path)
+
+        # Check that study folder is inside investigation folder
+        study_folder = "s_WP1-TEST1-TEST2_test2"
+        study_path = os.path.join(investigation_path, study_folder)
+        assert os.path.exists(study_path)
+
+    def test_cli_no_email_notification_flag(self, temp_dir, capsys):
+        """Test --no-email-notification flag."""
+        # Test with flag - should not print email
+        test_args_with_flag = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args_with_flag):
+            main()
+
+        captured = capsys.readouterr()
+        assert "EMAIL NOTIFICATION:" not in captured.out
+
+        # Test without flag - should print email
+        test_args_without_flag = [
+            "create_study_folder.py",
+            "-i",
+            "TEST3",
+            "-s",
+            "TEST4",
+            "--workpackage",
+            "WP2",
+            "-t",
+            temp_dir,
+        ]
+
+        with patch("sys.argv", test_args_without_flag):
+            main()
+
+        captured = capsys.readouterr()
+        assert "EMAIL NOTIFICATION:" in captured.out
+        assert "Dear Researchers" in captured.out
+
+    def test_cli_with_data_file_arg(self, temp_dir):
+        """Test --data CLI argument with JSON file."""
+        # Create a study data JSON file
+        study_data = {
+            "accession_code": "CXRS001",
+            "investigation_accession_code": "CXRI001",
+            "investigation_work_package": "WP3",
+            "title": "Test Study from JSON",
+            "slug": "test-study-from-json",
+            "description": "This study was loaded from JSON",
+            "investigation_title": "Test Investigation",
+            "security_level": "INTERNAL",
+            "principal_investigator": {
+                "first_name": "Alice",
+                "last_name": "Johnson",
+                "email": "alice.johnson@example.org",
+            },
+            "dataset_administrator": {
+                "first_name": "Bob",
+                "last_name": "Smith",
+                "email": "bob.smith@example.org",
+            },
+        }
+
+        data_file = os.path.join(temp_dir, "study_data.json")
+        with open(data_file, "w") as f:
+            json.dump(study_data, f)
+
+        test_args = [
+            "create_study_folder.py",
+            "--data",
+            data_file,
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check folder was created with data from JSON
+        expected_folder = "s_WP3-CXRI001-CXRS001_test-study-from-json"
+        expected_path = os.path.join(temp_dir, expected_folder)
+        assert os.path.exists(expected_path)
+
+        # Check policy file contains data from JSON
+        policy_path = os.path.join(expected_path, "FOLDER_POLICY.md")
+        with open(policy_path) as f:
+            content = f.read()
+        assert "Test Study from JSON" in content
+        assert "This study was loaded from JSON" in content
+        assert "Test Investigation" in content
+        assert "Alice Johnson" in content
+        assert "Bob Smith" in content
+        assert "INTERNAL" in content
+
+    def test_cli_data_file_overrides_with_cli_args(self, temp_dir):
+        """Test that CLI arguments override values from --data file."""
+        # Create a study data JSON file
+        study_data = {
+            "accession_code": "CXRS001",
+            "investigation_accession_code": "CXRI001",
+            "investigation_work_package": "WP3",
+            "title": "Original Title",
+            "slug": "original-slug",
+        }
+
+        data_file = os.path.join(temp_dir, "study_data.json")
+        with open(data_file, "w") as f:
+            json.dump(study_data, f)
+
+        test_args = [
+            "create_study_folder.py",
+            "--data",
+            data_file,
+            "--study_title",
+            "Overridden Title",
+            "--slug",
+            "overridden-slug",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            main()
+
+        # Check folder was created with overridden slug
+        expected_folder = "s_WP3-CXRI001-CXRS001_overridden-slug"
+        expected_path = os.path.join(temp_dir, expected_folder)
+        assert os.path.exists(expected_path)
+
+        # Check policy file contains overridden title
+        policy_path = os.path.join(expected_path, "FOLDER_POLICY.md")
+        with open(policy_path) as f:
+            content = f.read()
+        assert "Overridden Title" in content
+        assert "Original Title" not in content
+
+    def test_cli_api_url_arg(self, temp_dir):
+        """Test --api-url CLI argument."""
+        # Mock the API response
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "accession_code": "CXRS002",
+            "investigation_accession_code": "CXRI002",
+            "investigation_work_package": "WP4",
+            "title": "Study from API",
+            "slug": "study-from-api",
+            "security_level": "PUBLIC",
+            "principal_investigator": {
+                "first_name": "Carol",
+                "last_name": "White",
+                "email": "carol.white@example.org",
+            },
+        }
+
+        test_args = [
+            "create_study_folder.py",
+            "--api-url",
+            "https://example.com/api/studies/CXRS002/",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args), patch("requests.get", return_value=mock_response):
+            main()
+
+        # Check folder was created with data from API
+        expected_folder = "s_WP4-CXRI002-CXRS002_study-from-api"
+        expected_path = os.path.join(temp_dir, expected_folder)
+        assert os.path.exists(expected_path)
+
+        # Check policy file contains data from API
+        policy_path = os.path.join(expected_path, "FOLDER_POLICY.md")
+        with open(policy_path) as f:
+            content = f.read()
+        assert "Study from API" in content
+        assert "Carol White" in content
+
+    def test_cli_api_url_with_token(self, temp_dir):
+        """Test --api-url with --api-token CLI arguments."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "accession_code": "CXRS003",
+            "investigation_accession_code": "CXRI003",
+            "investigation_work_package": "WP5",
+            "title": "Authenticated Study",
+            "slug": "authenticated-study",
+            "security_level": "RESTRICTED",
+        }
+
+        test_args = [
+            "create_study_folder.py",
+            "--api-url",
+            "https://example.com/api/studies/CXRS003/",
+            "--api-token",
+            "test-token-123",
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args), patch("requests.get", return_value=mock_response) as mock_get:
+            main()
+
+        # Verify the request was made with authorization header
+        mock_get.assert_called_once()
+        call_kwargs = mock_get.call_args[1]
+        assert "headers" in call_kwargs
+        assert "Authorization" in call_kwargs["headers"]
+        assert call_kwargs["headers"]["Authorization"] == "Token test-token-123"
+
+        # Check folder was created
+        expected_folder = "s_WP5-CXRI003-CXRS003_authenticated-study"
+        expected_path = os.path.join(temp_dir, expected_folder)
+        assert os.path.exists(expected_path)
+
+    def test_cli_missing_required_args_error(self):
+        """Test that missing required arguments raises error."""
+        # Missing investigation when not using --data
+        test_args = [
+            "create_study_folder.py",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+        ]
+
+        with patch("sys.argv", test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 2  # argparse error code
+
+    def test_cli_data_and_api_url_both_provided_error(self, temp_dir):
+        """Test that providing both --data and --api-url raises error."""
+        data_file = os.path.join(temp_dir, "study_data.json")
+        with open(data_file, "w") as f:
+            json.dump({"accession_code": "TEST"}, f)
+
+        test_args = [
+            "create_study_folder.py",
+            "--data",
+            data_file,
+            "--api-url",
+            "https://example.com/api/studies/TEST/",
+            "-t",
+            temp_dir,
+        ]
+
+        with patch("sys.argv", test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 2  # argparse error code
+
+    def test_cli_invalid_sensitivity_value_error(self):
+        """Test that invalid sensitivity value raises error."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--sensitivity",
+            "INVALID",  # Invalid choice
+        ]
+
+        with patch("sys.argv", test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 2  # argparse error code
+
+    def test_cli_target_directory_not_exists_error(self):
+        """Test that non-existent target directory raises error."""
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "-t",
+            "/nonexistent/directory/path",
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 1
+
+    def test_cli_invalid_structure_file_error(self, temp_dir):
+        """Test that invalid structure file raises error."""
+        # Create an invalid JSON file
+        structure_file = os.path.join(temp_dir, "invalid.json")
+        with open(structure_file, "w") as f:
+            f.write("{ invalid json content")
+
+        test_args = [
+            "create_study_folder.py",
+            "-i",
+            "TEST1",
+            "-s",
+            "TEST2",
+            "--workpackage",
+            "WP1",
+            "--structure-file",
+            structure_file,
+            "-t",
+            temp_dir,
+            "--no-email-notification",
+        ]
+
+        with patch("sys.argv", test_args):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code == 1
