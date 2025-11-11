@@ -16,7 +16,9 @@ A command-line tool for creating standardized research folder structures with au
 Install the dataxr package using pip:
 
 ```bash
-pip install dataxr-tools
+git clone git@github.com:CropXR/dataxr-management-toolkit.git
+cd dataxr-management-toolkit.git
+pip install .
 ```
 
 No additional dependencies required - uses only Python standard library modules.
