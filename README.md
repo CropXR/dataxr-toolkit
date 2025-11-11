@@ -1,5 +1,7 @@
 # DataXR Study Folder Creator
 
+![Test Status](https://github.com/CropXR/dataxr-toolkit/actions/workflows/test_code.yml/badge.svg)
+
 A command-line tool for creating standardized research folder structures with automated policy management for CropXR projects.
 
 ## Features
@@ -16,8 +18,8 @@ A command-line tool for creating standardized research folder structures with au
 Install the dataxr package using pip:
 
 ```bash
-git clone git@github.com:CropXR/dataxr-management-toolkit.git
-cd dataxr-management-toolkit
+git clone git@github.com:CropXR/dataxr-toolkit.git
+cd dataxr-toolkit
 pip install .
 ```
 
