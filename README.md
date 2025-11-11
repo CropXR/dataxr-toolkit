@@ -17,7 +17,7 @@ Install the dataxr package using pip:
 
 ```bash
 git clone git@github.com:CropXR/dataxr-management-toolkit.git
-cd dataxr-management-toolkit.git
+cd dataxr-management-toolkit
 pip install .
 ```
 
