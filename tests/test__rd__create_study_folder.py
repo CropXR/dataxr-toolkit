@@ -38,12 +38,12 @@ class TestFolderStructureCreation:
             workpackage="WP1",
         )
 
-        expected_main_folder = os.path.join(temp_dir, "i_WP1_TEST1/s_TEST1-TEST2_test-study")
+        expected_main_folder = os.path.join(temp_dir, "s_WP1-TEST1-TEST2_test-study")
         assert result_path == expected_main_folder
         assert os.path.exists(expected_main_folder)
 
-        # Check default subfolders were created
-        expected_subfolders = ["TEST1-TEST2_raw_data", "TEST1-TEST2_processed_data", "TEST1-TEST2_metadata"]
+        # Check default subfolders were created (only study label prefix, no _data suffix)
+        expected_subfolders = ["TEST2_raw", "TEST2_processed", "TEST2_metadata"]
 
         for subfolder in expected_subfolders:
             subfolder_path = os.path.join(expected_main_folder, subfolder)
@@ -79,22 +79,22 @@ class TestFolderStructureCreation:
             structure=custom_structure,
         )
 
-        # Check custom structure was created with labels
+        # Check custom structure was created with labels (only study label prefix)
         main_folder = result_path
 
         # Check labeled folders exist
-        expected_folders = ["TEST1-TEST2_data", "TEST1-TEST2_analysis", "TEST1-TEST2_docs"]
+        expected_folders = ["TEST2_data", "TEST2_analysis", "TEST2_docs"]
 
         for folder in expected_folders:
             assert os.path.exists(os.path.join(main_folder, folder))
 
         # Check subfolders
-        data_folder = os.path.join(main_folder, "TEST1-TEST2_data")
+        data_folder = os.path.join(main_folder, "TEST2_data")
         assert os.path.exists(os.path.join(data_folder, "raw"))
         assert os.path.exists(os.path.join(data_folder, "processed", "batch1"))
         assert os.path.exists(os.path.join(data_folder, "processed", "batch2"))
 
-        docs_folder = os.path.join(main_folder, "TEST1-TEST2_docs")
+        docs_folder = os.path.join(main_folder, "TEST2_docs")
         assert os.path.exists(os.path.join(docs_folder, "reports"))
         assert os.path.exists(os.path.join(docs_folder, "protocols"))
 
@@ -110,7 +110,7 @@ class TestFolderStructureCreation:
         )
 
         # Add a file to one of the subfolders
-        subfolder_path = os.path.join(result_path, "TEST1-TEST2_raw_data")
+        subfolder_path = os.path.join(result_path, "TEST2_raw")
         test_file = os.path.join(subfolder_path, "important_data.txt")
         with open(test_file, "w") as f:
             f.write("Important data that should not be lost")
@@ -162,8 +162,8 @@ class TestFolderStructureCreation:
         # Add files to multiple subfolders
         test_files = {}
 
-        for folder_type in ["raw_data", "processed_data", "metadata"]:
-            folder_path = os.path.join(result_path, f"TEST1-TEST2_{folder_type}")
+        for folder_type in ["raw", "processed", "metadata"]:
+            folder_path = os.path.join(result_path, f"TEST2_{folder_type}")
             test_file = os.path.join(folder_path, f"test_{folder_type}.txt")
             test_content = f"Important {folder_type} content"
 
@@ -304,33 +304,28 @@ class TestUserParsing:
     def test_parse_users_from_study_json(self):
         """Test parsing users from study JSON data."""
         study_data = {
-            "owners": ["Dr. Alice Smith (alice@example.org)", "Dr. Bob Jones (bob@example.org)"],
-            "contributors": ["Dr. Carol Wilson (carol@example.org)", "Dr. David Brown (david@example.org)"],
-            "readers": ["Dr. Eve Davis (eve@example.org)"],
+            "principal_investigator": {"first_name": "Alice", "last_name": "Smith", "email": "alice@example.org"},
+            "dataset_administrator": {"first_name": "Bob", "last_name": "Jones", "email": "bob@example.org"},
         }
 
         users = parse_users_from_study_json(study_data)
 
-        # Check correct number of users
-        assert len(users) == 5
+        # Check correct number of users (PI and Dataset Admin)
+        assert len(users) == 2
 
-        # Check owners have correct access level
-        owners = [u for u in users if u["role"] == "Owner"]
-        assert len(owners) == 2
-        for owner in owners:
-            assert owner["access_level"] == "READ-WRITE"
+        # Check PI has correct access level
+        pi_users = [u for u in users if u["role"] == "Principal Investigator"]
+        assert len(pi_users) == 1
+        assert pi_users[0]["access_level"] == "READ-WRITE-SHARE"
+        assert "Alice Smith" in pi_users[0]["name"]
+        assert "alice@example.org" in pi_users[0]["name"]
 
-        # Check contributors have correct access level
-        contributors = [u for u in users if u["role"] == "Contributor"]
-        assert len(contributors) == 2
-        for contrib in contributors:
-            assert contrib["access_level"] == "READ"
-
-        # Check readers have correct access level
-        readers = [u for u in users if u["role"] == "Reader"]
-        assert len(readers) == 1
-        for reader in readers:
-            assert reader["access_level"] == "READ"
+        # Check Dataset Administrator has correct access level
+        admin_users = [u for u in users if u["role"] == "Dataset Administrator"]
+        assert len(admin_users) == 1
+        assert admin_users[0]["access_level"] == "READ-WRITE-SHARE"
+        assert "Bob Jones" in admin_users[0]["name"]
+        assert "bob@example.org" in admin_users[0]["name"]
 
     def test_parse_users_empty_data(self):
         """Test parsing users from empty data."""
@@ -392,7 +387,7 @@ class TestIntegrationWithStudyConfig:
         pi_email = sample_study_config["effective_principal_investigator_email"]
         authorized_users = parse_users_from_study_json(sample_study_config)
 
-        # Create folder structure
+        # Create folder structure with investigation folder enabled since folder_name includes it
         result_path = create_folder_structure(
             target_path=temp_dir,
             folder_name=folder_name,
@@ -405,6 +400,7 @@ class TestIntegrationWithStudyConfig:
             pi_name=pi_name,
             pi_email=pi_email,
             workpackage=workpackage,
+            create_investigation_folder=True,
         )
 
         # Verify folder structure was created correctly
@@ -416,13 +412,13 @@ class TestIntegrationWithStudyConfig:
         policy_path = os.path.join(expected_path, "FOLDER_POLICY.md")
         assert os.path.exists(policy_path)
 
-        # Add some user files
-        raw_data_folder = os.path.join(expected_path, f"{investigation_label}-{study_label}_raw_data")
+        # Add some user files (using only study label prefix)
+        raw_data_folder = os.path.join(expected_path, f"{study_label}_raw")
         user_file1 = os.path.join(raw_data_folder, "experiment_data.csv")
         with open(user_file1, "w") as f:
             f.write("sample,measurement,value\nsample1,temp,25.3\n")
 
-        metadata_folder = os.path.join(expected_path, f"{investigation_label}-{study_label}_metadata")
+        metadata_folder = os.path.join(expected_path, f"{study_label}_metadata")
         user_file2 = os.path.join(metadata_folder, "sample_info.json")
         with open(user_file2, "w") as f:
             f.write('{"sample1": {"location": "greenhouse", "treatment": "control"}}')
@@ -440,6 +436,7 @@ class TestIntegrationWithStudyConfig:
             pi_name=pi_name,
             pi_email=pi_email,
             workpackage=workpackage,
+            create_investigation_folder=True,
         )
 
         # Verify paths are the same
