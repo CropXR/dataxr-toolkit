@@ -13,7 +13,11 @@ def _is_editable() -> bool:
     dist = Distribution.from_name("dataxr-toolkit")
 
     if sys.version_info >= (3, 13):
-        editable = dist.origin.dir_info.editable
+        # For Python 3.13+, check if dir_info exists (editable installs only)
+        dir_info = getattr(dist.origin, "dir_info", None)
+        if dir_info is None:
+            return False
+        editable = getattr(dir_info, "editable", False)
     else:
         direct_url = dist.read_text("direct_url.json")
         if direct_url is None:
