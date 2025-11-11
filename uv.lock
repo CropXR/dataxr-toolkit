@@ -313,7 +313,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dataxr-tools"
+name = "dataxr-toolkit"
 source = { editable = "." }
 dependencies = [
     { name = "requests" },

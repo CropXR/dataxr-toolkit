@@ -10,7 +10,7 @@ from importlib.metadata import Distribution, version
 
 
 def _is_editable() -> bool:
-    dist = Distribution.from_name("DataXR-Tools")
+    dist = Distribution.from_name("dataxr-toolkit")
 
     if sys.version_info >= (3, 13):
         editable = dist.origin.dir_info.editable
